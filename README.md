@@ -44,3 +44,11 @@ Env: `LLM_BACKEND=auto|anthropic|offline`, `EMBEDDING_BACKEND=auto|bge|hash`, `V
 
 ## Verification
 `python -m pytest tests -q` (21) · `python -m pytest e2e -q` (13 Playwright browser tests; needs `pip install playwright && playwright install chromium`; screenshots in `e2e/screenshots/`) · `PYTHONPATH=. python scripts/check_cases.py`. Manual scenarios: `TESTING.md`.
+
+## Hyperparameter tuning (scripts/tune.py)
+Sweep on a mixed 16-chunk corpus (samples + test_inputs, unscoped = harder), retrieval recall only, offline LLM:
+- Spec defaults (600/60, N=3, k=2, RRF 60, top-k 5) sit on the plateau: Standard and Graph RAG reach 1.00 recall.
+- top-k 3 is the smallest value where Graph RAG keeps 1.00 while Standard drops to 0.93.
+- RRF constant (10-100) and hop radius (0-3) made no measurable difference on a corpus this small, so they stay at spec values.
+- With bge-large-en-v1.5, HyDE recall rose 0.71 -> 0.93 versus the hashing fallback.
+Re-run `PYTHONPATH=. python scripts/tune.py` on your real corpus and gold questions before changing defaults.

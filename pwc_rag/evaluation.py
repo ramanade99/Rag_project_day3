@@ -28,30 +28,50 @@ def retrieval_context_recall(result: RAGResult, facts: list[str]) -> float:
 _CITE = re.compile(r"\[S(\d+)\]")
 
 
-def faithfulness(result: RAGResult, min_overlap: float = 0.6) -> float:
-    """Fraction of claims (cited sentences) whose content words are mostly present in the cited source.
+_NUM = re.compile(r"\d[\d,\.]*")
+_STOPW = {"the", "a", "an", "of", "and", "to", "in", "is", "s", "for", "on", "by", "or", "as", "at", "be", "are", "that", "this"}
 
-    Uncited factual sentences count as unsupported. Headings and the 'Gaps' section are ignored.
-    Heuristic proxy; swap in an LLM judge (e.g. RAGAS) for production audits.
+
+def _stem(w: str) -> str:
+    for suf in ("ing", "ed", "es", "s"):
+        if w.endswith(suf) and len(w) > len(suf) + 3:
+            return w[: -len(suf)]
+    return w
+
+
+def faithfulness(result: RAGResult, min_overlap: float = 0.5) -> float:
+    """Fraction of claims supported by their cited sources.
+
+    A claim is a cited/factual line (headings, table rules, bold labels and the 'Gaps' section are ignored).
+    Supported = every number/amount in the claim appears in a cited source AND >= `min_overlap` of its
+    (stemmed) content words appear in the union of cited sources. Uncited claims are unsupported.
+    Lexical proxy - use an LLM judge (e.g. RAGAS) for audit-grade scoring.
     """
     claims = supported = 0
     in_gaps = False
     for line in result.answer.splitlines():
         line = line.strip()
         if line.startswith("#"):
-            in_gaps = "gap" in line.lower()
+            in_gaps = "gap" in line.lower() or "limitation" in line.lower()
             continue
-        if in_gaps or len(line) < 20:
+        if line.startswith(">") or set(line) <= set("|-: "):
+            continue
+        plain = _CITE.sub("", line).strip("-*•| ").strip()
+        if in_gaps or len(plain) < 20 or (plain.endswith(":") and not _NUM.search(plain)):
             continue
         claims += 1
         ids = [int(x) for x in _CITE.findall(line)]
-        words = set(tokenize(_CITE.sub("", line))) - {"the", "a", "of", "and", "to", "in", "is", "s"}
-        ok = False
-        for i in ids:
-            if 1 <= i <= len(result.contexts) and words:
-                src = set(tokenize(result.contexts[i - 1].page_content))
-                ok = ok or len(words & src) / len(words) >= min_overlap
-        supported += ok
+        src_text = " ".join(result.contexts[i - 1].page_content for i in ids if 1 <= i <= len(result.contexts))
+        if not src_text:
+            continue
+        src_norm = _norm(src_text).replace(",", "")
+        nums = [n.strip(".,").replace(",", "") for n in _NUM.findall(plain)]
+        if any(n and n not in src_norm for n in nums):
+            continue
+        words = {_stem(w) for w in tokenize(plain)} - _STOPW
+        src = {_stem(w) for w in tokenize(src_text)}
+        if words and len(words & src) / len(words) >= min_overlap:
+            supported += 1
     return 1.0 if claims == 0 else supported / claims
 
 

@@ -98,6 +98,7 @@ def test_prompt_injection_not_obeyed(page):
 def test_tab2_3d_graph(page):
     ingest(page, "Deal Advisory & Corporate Finance", ["S5_spa_deal.docx", "S5_fema_reporting.txt"])
     tab(page, "2 Knowledge Graph")
+    page.get_by_text("3D WebGL (needs GPU/WebGL)").click(); page.wait_for_timeout(1500)
     plot = page.locator(".js-plotly-plot")
     expect(plot.first).to_be_visible(timeout=30000)
     assert page.locator(".js-plotly-plot canvas, .js-plotly-plot .gl-container").count() > 0  # WebGL scene present
@@ -184,3 +185,22 @@ def test_graph_focus_and_toggle_controls_and_trace(page):
     tab(page, "5 Comparative Benchmark")
     page.get_by_role("button", name="Run benchmark on eval set").click()
     expect(page.get_by_role("button", name="Download report (JSON)")).to_be_visible(timeout=90000)
+
+
+def test_sphere_renders_without_webgl(server, tmp_path):
+    """Regression: the default graph view must work in browsers/VMs with WebGL disabled."""
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(args=["--disable-gpu", "--disable-webgl", "--disable-3d-apis"])
+        pg = b.new_page(viewport={"width": 1500, "height": 1000})
+        pg.goto(URL); pg.wait_for_selector("text=PwC India Advisory", timeout=30000)
+        pg.get_by_role("button", name="Load bundled sample corpus").click()
+        expect(pg.get_by_text("Indexed")).to_be_visible(timeout=60000)
+        tab(pg, "2 Knowledge Graph")
+        expect(pg.locator(".js-plotly-plot .scatterlayer").first).to_be_visible(timeout=30000)
+        pg.wait_for_timeout(1500)
+        assert "WebGL is not supported" not in pg.inner_text("body")
+        assert pg.locator(".js-plotly-plot .scatterlayer .points path").count() >= 10  # entity markers drawn
+        pg.screenshot(path=str(SHOTS / "tab2_sphere_no_webgl.png"))
+        pick(pg, "Focus entity", "CBIC")
+        pg.screenshot(path=str(SHOTS / "tab2_sphere_focus.png"))
+        b.close()

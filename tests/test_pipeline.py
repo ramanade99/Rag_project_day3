@@ -155,3 +155,12 @@ def test_headings_are_not_entities():
     from pwc_rag.entities import find_entities
     names = [n for n, *_ in find_entities("Section 1. Penalty\nThe CBIC levies a fine under Section 73 of the CGST Act.")]
     assert "Section 1" not in names and "Section 73" in names and "CBIC" in names
+
+
+def test_faithfulness_numeric_grounding_and_paraphrase(index):
+    ctx = [index.vectors.docs[0].__class__(page_content="The CBIC mandates e-invoicing where turnover exceeds Rs. 5 crore.")]
+    ok = RAGResult("x", "q", "## Answer\n- E-invoicing is mandatory when turnover exceeds Rs. 5 crore, per CBIC [S1]\n", ctx)
+    wrong_number = RAGResult("x", "q", "## Answer\n- E-invoicing is mandatory when turnover exceeds Rs. 20 crore, per CBIC [S1]\n", ctx)
+    headings = RAGResult("x", "q", "## Answer\n**Key points:**\n- E-invoicing is mandatory when turnover exceeds Rs. 5 crore [S1]\n"
+                         "## Gaps & Limitations\n- Nothing on penalties.\n", ctx)
+    assert faithfulness(ok) == 1.0 and faithfulness(wrong_number) == 0.0 and faithfulness(headings) == 1.0

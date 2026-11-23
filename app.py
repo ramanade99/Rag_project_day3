@@ -44,6 +44,8 @@ S = st.session_state
 for k, v in dict(settings=Settings(), raw_docs=[], index=None, chat=[], last=None, enabled_nodes=set(NODES),
                  cycle=True, bench=None, history=[], docs=[], pending_q=None, ingest_msg=None).items():
     S.setdefault(k, v)
+if S.ingest_msg is not None and not isinstance(S.ingest_msg, list):
+    S.ingest_msg = None
 
 
 # ----------------------------------------------------------------------------- helpers
@@ -68,8 +70,12 @@ def engine_obj(name):
 
 
 def gold_match(question):
+    """Gold-set entry for this question - only if the documents it was written for are actually loaded,
+    otherwise RCR would be a false 0.00 (the expected fact lives in a document you did not ingest)."""
     ev, _ = load_eval("data")
-    return next((q for q in ev if q["question"].strip().lower() == question.strip().lower()), None)
+    m = next((q for q in ev if q["question"].strip().lower() == question.strip().lower()), None)
+    loaded = {d["File"] for d in S.docs}
+    return m if m and set(m.get("docs", [])) <= loaded else None
 
 
 def run_query(question, area, engine):
@@ -95,7 +101,7 @@ def render_sources(r, question):
                     f'<code>{html.escape(str(m.get("chunk_id")))}</code><br>{txt}</div>', unsafe_allow_html=True)
 
 
-def kg_figure(kg, focus=None, hops=2):
+def kg_layout(kg):
     nodes = sorted(kg.g.nodes)
     n = len(nodes)
     emb = kg.node_embeddings(dim=3) if n >= 4 else {}
@@ -108,6 +114,54 @@ def kg_figure(kg, focus=None, hops=2):
             i = k + 0.5
             ph, th = np.arccos(1 - 2 * i / n), np.pi * (1 + 5 ** 0.5) * i
             pos[m] = (np.cos(th) * np.sin(ph), np.sin(th) * np.sin(ph), np.cos(ph))
+    return nodes, pos
+
+
+def _node_color(kg, m, focus, near):
+    if m in kg.disabled_nodes:
+        return GREY
+    if focus:
+        return "#B7005B" if m == focus else (ORANGE if m in near else "#E3C9B8")
+    return ORANGE
+
+
+def kg_figure_svg(kg, focus=None, hops=2, azim=30, elev=20):
+    """Rotatable sphere rendered as an orthographic 2D projection (SVG) - works without WebGL."""
+    nodes, pos = kg_layout(kg)
+    a, e = np.radians(azim), np.radians(elev)
+    Rz = np.array([[np.cos(a), -np.sin(a), 0], [np.sin(a), np.cos(a), 0], [0, 0, 1]])
+    Rx = np.array([[1, 0, 0], [0, np.cos(e), -np.sin(e)], [0, np.sin(e), np.cos(e)]])
+    P = {m: Rx @ Rz @ np.asarray(pos[m]) for m in nodes}  # x right, z up, y = depth (towards viewer is negative)
+    near = kg.k_hop([focus], hops) if focus else {}
+    deg = dict(kg.g.degree())
+    t = np.linspace(0, 2 * np.pi, 120)
+    fig = go.Figure(go.Scatter(x=np.cos(t), y=np.sin(t), mode="lines", line=dict(color="#d9d2cb", width=2),
+                               fill="toself", fillcolor="rgba(245,242,238,0.6)", hoverinfo="skip"))
+    ex, ey, mx, my, mt = [], [], [], [], []
+    for u, v, d in kg.g.edges(data=True):
+        rel = d["relation"]
+        if u in kg.disabled_nodes or v in kg.disabled_nodes or (u, v, rel) in kg.disabled_edges:
+            continue
+        ex += [P[u][0], P[v][0], None]; ey += [P[u][2], P[v][2], None]
+        mx.append((P[u][0] + P[v][0]) / 2); my.append((P[u][2] + P[v][2]) / 2); mt.append(f"{u} -[{rel}]-> {v}")
+    fig.add_trace(go.Scatter(x=ex, y=ey, mode="lines", line=dict(color="#9aa0a6", width=1.5), hoverinfo="none"))
+    fig.add_trace(go.Scatter(x=mx, y=my, mode="markers", marker=dict(size=4, color="#555"), text=mt, hoverinfo="text"))
+    order = sorted(nodes, key=lambda m: -P[m][1])  # back to front
+    front = [(1 - P[m][1]) / 2 for m in order]     # 0 (back) .. 1 (front)
+    fig.add_trace(go.Scatter(
+        x=[P[m][0] for m in order], y=[P[m][2] for m in order], mode="markers+text", text=order, textposition="top center",
+        textfont=dict(size=11), hovertext=[f"{m} (degree {deg[m]})" for m in order], hoverinfo="text",
+        marker=dict(size=[(6 + 2 * deg[m]) * (0.7 + 0.6 * f) for m, f in zip(order, front)],
+                    color=[_node_color(kg, m, focus, near) for m in order],
+                    opacity=[0.35 + 0.65 * f for f in front], line=dict(width=1, color="white"))))
+    fig.update_layout(height=560, showlegend=False, margin=dict(l=0, r=0, t=0, b=0),
+                      xaxis=dict(visible=False, range=[-1.35, 1.35], scaleanchor="y"), yaxis=dict(visible=False, range=[-1.25, 1.25]),
+                      plot_bgcolor="white")
+    return fig
+
+
+def kg_figure(kg, focus=None, hops=2):
+    nodes, pos = kg_layout(kg)
     near = kg.k_hop([focus], hops) if focus else {}
     ex, ey, ez, mx, my, mz, mt = [], [], [], [], [], [], []
     for a, b, d in kg.g.edges(data=True):
@@ -120,12 +174,7 @@ def kg_figure(kg, focus=None, hops=2):
     u, v = np.meshgrid(np.linspace(0, 2 * np.pi, 30), np.linspace(0, np.pi, 20))
     deg = dict(kg.g.degree())
 
-    def color(m):
-        if m in kg.disabled_nodes:
-            return GREY
-        if focus:
-            return "#B7005B" if m == focus else (ORANGE if m in near else "#E3C9B8")
-        return ORANGE
+    color = lambda m: _node_color(kg, m, focus, near)  # noqa: E731
     fig = go.Figure([
         go.Surface(x=np.cos(u) * np.sin(v), y=np.sin(u) * np.sin(v), z=np.cos(v), opacity=0.06, showscale=False,
                    colorscale=[[0, "#ccc"], [1, "#ccc"]], hoverinfo="skip"),
@@ -208,6 +257,8 @@ with t1:
     engine = c2.selectbox("RAG Engine", list(ENGINES), index=2)
     c3.info(f"**Guardrail:** {PRACTICE_AREAS[area]['guardrail']}")
 
+    for kind, text in (S.ingest_msg or []):
+        (st.error if kind == "error" else st.success)(text)
     with st.expander("Documents", expanded=not S.index):
         up = st.file_uploader("Drag and drop documents (PDF, DOCX, JSON, CSV, TXT, MD)",
                               type=[e.lstrip(".") for e in sorted(SUPPORTED)], accept_multiple_files=True)
@@ -229,10 +280,10 @@ with t1:
                         except Exception as e:  # noqa: BLE001 - surface per-file failures to the user
                             errors.append(f"{name}: {e}")
                 new = ingest_docs(docs, area) if docs else 0
-            for e in errors:
-                st.error(f"Could not ingest {e}")
+            S.ingest_msg = [("error", f"Could not ingest {e}") for e in errors]
             if docs:
-                st.success(f"Indexed {new} new chunks from {len(up) - len(errors)} file(s); total {len(S.index.chunks)}.")
+                S.ingest_msg.append(("success", f"Indexed {new} new chunks from {len(up) - len(errors)} file(s); total {len(S.index.chunks)}."))
+            st.rerun()
         if b2.button("Load bundled sample corpus"):
             area_of = {"tax": "Tax & Regulatory Services", "direct": "Tax & Regulatory Services",
                        "grc": "Risk Advisory & Governance (GRC)", "deal": "Deal Advisory & Corporate Finance"}
@@ -242,7 +293,8 @@ with t1:
                     fa = area_of.get(p.name.split("_")[0], area)
                     new += ingest_docs(load_file(p, fa), fa)
                     S.docs.append({"File": p.name, "Area": fa, "Type": "txt"})
-            st.success(f"Indexed {new} new chunks; total {len(S.index.chunks)}.")
+            S.ingest_msg = [("success", f"Indexed {new} new chunks; total {len(S.index.chunks)}.")]
+            st.rerun()
         if S.docs:
             st.dataframe(S.docs, hide_index=True, width="stretch")
 
@@ -306,15 +358,25 @@ with t2:
         if bar[1].button("Disable all"):
             kg.disabled_nodes = set(nodes); st.rerun()
         focus = bar[3].selectbox("Focus entity (highlights its k-hop neighbourhood)", ["(none)"] + nodes)
-        keep = st.multiselect("Active entities (unselect to exclude from retrieval)", nodes,
-                              default=[n for n in nodes if n not in kg.disabled_nodes])
-        kg.disabled_nodes = set(nodes) - set(keep)
-        edges = sorted({(a, b, d["relation"]) for a, b, d in kg.g.edges(data=True)})
-        elabel = lambda e: f"{e[0]} -[{e[2]}]-> {e[1]}"  # noqa: E731
-        ekeep = st.multiselect("Active relations", [elabel(e) for e in edges],
-                               default=[elabel(e) for e in edges if e not in kg.disabled_edges])
-        kg.disabled_edges = {e for e in edges if elabel(e) not in ekeep}
-        st.plotly_chart(kg_figure(kg, None if focus == "(none)" else focus, S.settings.hp.graph_hops), width="stretch")
+        with st.expander("Filter entities & relations (changes Graph RAG retrieval)", expanded=False):
+            keep = st.multiselect("Active entities (unselect to exclude from retrieval)", nodes,
+                                  default=[n for n in nodes if n not in kg.disabled_nodes])
+            kg.disabled_nodes = set(nodes) - set(keep)
+            edges = sorted({(a, b, d["relation"]) for a, b, d in kg.g.edges(data=True)})
+            elabel = lambda e: f"{e[0]} -[{e[2]}]-> {e[1]}"  # noqa: E731
+            ekeep = st.multiselect("Active relations", [elabel(e) for e in edges],
+                                   default=[elabel(e) for e in edges if e not in kg.disabled_edges])
+            kg.disabled_edges = {e for e in edges if elabel(e) not in ekeep}
+        rc, v1, v2 = st.columns([2, 1.5, 1.5])
+        mode = rc.radio("Rendering", ["Sphere (works in any browser)", "3D WebGL (needs GPU/WebGL)"],
+                        help="If the 3D WebGL view is blank or says WebGL is unsupported, use the compatible sphere view.")
+        fcs = None if focus == "(none)" else focus
+        if mode.startswith("Sphere"):
+            az = v1.slider("Rotate (azimuth)", 0, 360, 30)
+            el = v2.slider("Tilt (elevation)", -90, 90, 20)
+            st.plotly_chart(kg_figure_svg(kg, fcs, S.settings.hp.graph_hops, az, el), width="stretch")
+        else:
+            st.plotly_chart(kg_figure(kg, fcs, S.settings.hp.graph_hops), width="stretch")
         st.caption(f"{len(nodes) - len(kg.disabled_nodes)} active entities | {len(edges)} relations | layout: Node2Vec-style "
                    "structural embeddings projected onto a sphere. Hover edge midpoints for relation labels; "
                    "grey = excluded from Graph RAG retrieval.")
@@ -382,7 +444,8 @@ with t4:
         rcr = retrieval_context_recall(r, m["facts"]) if m else (S.bench[r.engine]["rcr"] if S.bench and r.engine in S.bench else None)
     k = st.columns(4)
     k[0].metric("Retrieval Context Recall", "n/a" if rcr is None else f"{rcr:.2f}",
-                help="Live if the last question is in data/eval_set.json, else the last Tab 5 benchmark mean.")
+                help="Live only if the last question is in data/eval_set.json AND its source documents are loaded; "
+                     "otherwise the last Tab 5 benchmark mean (or n/a).")
     k[1].metric("Faithfulness", "n/a" if not r else f"{faithfulness(r):.2f}")
     k[2].metric("Entity-Resolution Acc.", "n/a" if not S.index else f"{entity_resolution_accuracy(S.index, gold):.2f}")
     k[3].metric("End-to-end latency (ms)", "n/a" if not r else f"{r.latency_ms:.0f}")
