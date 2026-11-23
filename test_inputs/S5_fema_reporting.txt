@@ -1,0 +1,5 @@
+SYNTHETIC TEST DATA - NOT REAL LAW.
+
+Section 1. FEMA requires reporting of share allotment to the RBI within 30 days.
+Section 2. The Companies Act 2013 requires valuation by a registered valuer before allotment to a non-resident.
+Section 3. The RBI may impose a compounding penalty for late FEMA reporting.

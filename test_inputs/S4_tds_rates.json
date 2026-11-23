@@ -1,0 +1,20 @@
+[
+ {
+  "section": "194C",
+  "payment": "Contractor (individual)",
+  "rate": "1 percent",
+  "threshold": "Rs. 30,000"
+ },
+ {
+  "section": "194J",
+  "payment": "Professional fees",
+  "rate": "10 percent",
+  "threshold": "Rs. 50,000"
+ },
+ {
+  "section": "194I",
+  "payment": "Rent of land and building",
+  "rate": "10 percent",
+  "threshold": "Rs. 2,40,000"
+ }
+]
