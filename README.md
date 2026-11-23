@@ -33,3 +33,14 @@ Env: `LLM_BACKEND=auto|anthropic|offline`, `EMBEDDING_BACKEND=auto|bge|hash`, `V
 - Faithfulness is a lexical-overlap proxy; use an LLM judge (e.g. RAGAS) for audit-grade scoring. Neo4j/Qdrant are not wired in: NetworkX and numpy/Chroma are used behind small interfaces.
 - Not verified live: the Anthropic call path (no network in the build sandbox). If the LLM fails, answers degrade visibly to extractive mode.
 - Uploaded documents may contain client-confidential data/PII; run on approved infrastructure and note text is sent to the configured LLM.
+
+## UI features (app.py)
+- Branded theme (`.streamlit/config.toml`), sidebar with live system status (LLM, embeddings, vector store, warnings when running in offline/fallback mode), workspace counters, vector-store switch (numpy/Chroma) and reset.
+- Tab 1: drag-and-drop upload with per-file error reporting (corrupt/empty files are reported, not fatal), incremental indexing, document table, example questions per practice area, **side-by-side comparison of all three engines**, highlighted source cards, transcript download.
+- Tab 2: Node2Vec-positioned 3D sphere, enable/disable all, per-entity/relation filters that change Graph RAG retrieval, focus-entity k-hop highlight, relation table, alias->canonical resolution map.
+- Tab 3: workflow DAG with cycle arc, node + cycle toggles, executed nodes ringed, last-run trace.
+- Tab 4: the 4 hyperparameters (restore-spec-defaults button), 4 live KPIs, latency breakdown chart, session query history (JSON download).
+- Tab 5: engine multi-select, results table, recall-by-query-type and latency charts, spec qualitative matrix, per-question details, JSON report download.
+
+## Verification
+`python -m pytest tests -q` (21) · `python -m pytest e2e -q` (13 Playwright browser tests; needs `pip install playwright && playwright install chromium`; screenshots in `e2e/screenshots/`) · `PYTHONPATH=. python scripts/check_cases.py`. Manual scenarios: `TESTING.md`.

@@ -126,3 +126,61 @@ def test_tab3_toggle_and_tab4_tab5(page):
     body = page.inner_text("body")
     assert all(e in body for e in ["Standard RAG", "HyDE RAG", "Graph RAG"])
     page.screenshot(path=str(SHOTS / "tab5_benchmark.png"), full_page=True)
+
+
+def test_sidebar_status_and_reset(page):
+    body = page.inner_text("body")
+    assert "System status" in body and "Offline extractive mode" in body
+    page.get_by_role("button", name="Load bundled sample corpus").click()
+    expect(page.get_by_text("Indexed")).to_be_visible(timeout=60000)
+    page.get_by_role("button", name="Reset workspace").click()
+    page.wait_for_timeout(2000)
+    assert "Indexed" not in page.inner_text("body")
+    page.screenshot(path=str(SHOTS / "sidebar_after_reset.png"))
+
+
+def test_example_question_button(page):
+    page.get_by_role("button", name="Load bundled sample corpus").click()
+    expect(page.get_by_text("Indexed")).to_be_visible(timeout=60000)
+    page.get_by_role("button", name="What is the e-invoicing turnover threshold?").click()
+    expect(page.locator('[data-testid="stChatMessage"]')).to_have_count(2, timeout=60000)
+    assert "Rs. 5 crore" in page.locator('[data-testid="stChatMessage"]').last.inner_text()
+
+
+def test_compare_all_engines_side_by_side(page):
+    page.get_by_role("button", name="Load bundled sample corpus").click()
+    expect(page.get_by_text("Indexed")).to_be_visible(timeout=60000)
+    page.get_by_text("Compare all 3 engines").click(); page.wait_for_timeout(800)
+    box = page.get_by_test_id("stChatInputTextArea"); box.fill("What is the e-invoicing turnover threshold?"); box.press("Enter")
+    expect(page.locator('[data-testid="stChatMessage"]')).to_have_count(2, timeout=60000)
+    msg = page.locator('[data-testid="stChatMessage"]').last.inner_text()
+    assert all(e in msg for e in ["Standard RAG", "HyDE RAG", "Graph RAG"])
+    page.screenshot(path=str(SHOTS / "tab1_compare.png"), full_page=True)
+
+
+def test_bad_file_is_reported_not_crashing(page, tmp_path):
+    bad = tmp_path / "corrupt.pdf"; bad.write_bytes(b"not a real pdf")
+    empty = tmp_path / "empty.txt"; empty.write_text("   ")
+    page.locator('input[type="file"]').set_input_files([str(bad), str(empty)])
+    page.wait_for_timeout(2500)
+    page.get_by_role("button", name="Ingest uploads").click()
+    expect(page.get_by_text("Could not ingest").first).to_be_visible(timeout=30000)
+    assert "Traceback" not in page.inner_text("body")
+
+
+def test_graph_focus_and_toggle_controls_and_trace(page):
+    page.get_by_role("button", name="Load bundled sample corpus").click()
+    expect(page.get_by_text("Indexed")).to_be_visible(timeout=60000)
+    ask(page, "What is the penalty for delayed IRN reporting?")
+    tab(page, "2 Knowledge Graph")
+    pick(page, "Focus entity", "CBIC")
+    expect(page.get_by_text("relations").first).to_be_visible()
+    page.get_by_role("button", name="Disable all").click(); page.wait_for_timeout(1500)
+    page.get_by_role("button", name="Enable all").click(); page.wait_for_timeout(1500)
+    page.screenshot(path=str(SHOTS / "tab2_focus.png"))
+    tab(page, "3 LangGraph Workflow")
+    assert "Last run trace" in page.inner_text("body")
+    page.screenshot(path=str(SHOTS / "tab3_trace.png"))
+    tab(page, "5 Comparative Benchmark")
+    page.get_by_role("button", name="Run benchmark on eval set").click()
+    expect(page.get_by_role("button", name="Download report (JSON)")).to_be_visible(timeout=90000)
