@@ -108,8 +108,9 @@ def test_faithfulness_flags_uncited_claims(index):
 def test_node_embeddings_and_hops(index):
     emb = index.kg.node_embeddings(dim=8)
     assert set(emb) == set(index.kg.g.nodes)
-    assert "GST Council" in index.kg.k_hop(["CGST Act"], 2)
-    assert "GST Council" not in index.kg.k_hop(["CGST Act"], 1)
+    h0, h1, h2 = (index.kg.k_hop(["CGST Act"], k) for k in (0, 1, 2))
+    assert h0 == {"CGST Act": 0} and set(h0) <= set(h1) <= set(h2) and len(h1) > 1
+    assert max(h1.values()) <= 1 and max(h2.values()) <= 2
 
 
 def test_benchmark_graph_rag_best_recall(index):
@@ -136,3 +137,21 @@ def test_llm_failure_degrades_visibly(index):
     finally:
         index.llm = orig
     assert "LLM unavailable" in r.answer
+
+
+def test_offline_answer_keeps_rupee_amounts():
+    out = OfflineLLM().invoke("s", "QUESTION: What is the e-invoicing turnover threshold?\n<context>\n[S1] (a)\n"
+                              "The CBIC mandates e-invoicing where turnover exceeds Rs. 20 crore in any year.\n</context>")
+    assert "Rs. 20 crore" in out
+
+
+def test_hard_wrapped_pdf_lines_do_not_split_amounts():
+    from pwc_rag.textutil import split_sentences
+    t = "Section 1. The CBIC mandates e-invoicing above Rs.\n20 crore turnover.\nSection 2. Penalty applies."
+    assert split_sentences(t)[0].startswith("Section 1.") and any("Rs. 20 crore" in s for s in split_sentences(t))
+
+
+def test_headings_are_not_entities():
+    from pwc_rag.entities import find_entities
+    names = [n for n, *_ in find_entities("Section 1. Penalty\nThe CBIC levies a fine under Section 73 of the CGST Act.")]
+    assert "Section 1" not in names and "Section 73" in names and "CBIC" in names

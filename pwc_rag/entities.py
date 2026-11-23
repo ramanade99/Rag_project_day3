@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 
 from .llm import LLM
+from .textutil import split_sentences
 
 # Canonical entity -> aliases. Normalisation is what lets the graph link "Income Tax Dept" to "CBDT".
 ALIASES: dict[str, list[str]] = {
@@ -69,13 +70,17 @@ class Triple:
 
 def find_entities(text: str) -> list[tuple[str, int, int]]:
     spans = [(normalize_entity(m.group(0)), m.start(), m.end()) for m in _ALIAS_RE.finditer(text)]
-    spans += [(normalize_entity(m.group(0)), m.start(), m.end()) for m in _REF_RE.finditer(text)]
+    for m in _REF_RE.finditer(text):
+        at_line_start = not text[:m.start()].strip() or text[:m.start()].rstrip(" \t").endswith("\n")
+        if at_line_start and text[m.end():m.end() + 1] in (".", ":"):
+            continue  # structural heading ("Section 1. Penalty"), not a statutory reference
+        spans.append((normalize_entity(m.group(0)), m.start(), m.end()))
     return sorted(spans, key=lambda s: s[1])
 
 
 def extract_rule_based(text: str, chunk_id: str = "") -> list[Triple]:
     out: list[Triple] = []
-    for sent in re.split(r"(?<=[.;])\s+|\n+", text):
+    for sent in split_sentences(text):
         ents = find_entities(sent)
         for (a, _, ae), (b, bs, _) in zip(ents, ents[1:]):
             if a == b:
@@ -83,6 +88,14 @@ def extract_rule_based(text: str, chunk_id: str = "") -> list[Triple]:
             between = sent[ae:bs]
             rel = next((lab for pat, lab in RELATIONS.items() if re.search(pat, between, re.I)), "related_to")
             out.append(Triple(a, rel, b, chunk_id))
+    # Paragraph-level co-occurrence: link entities that share a paragraph but no sentence (weaker evidence).
+    linked = {frozenset((t.head, t.tail)) for t in out}
+    for para in re.split(r"\n\s*\n|\n(?=\s*(?:Section|Clause|Rule)\s+\d)", text):
+        names = list(dict.fromkeys(n for n, *_ in find_entities(para)))
+        for a, b in zip(names, names[1:]):
+            if frozenset((a, b)) not in linked:
+                out.append(Triple(a, "co_occurs_with", b, chunk_id))
+                linked.add(frozenset((a, b)))
     return out
 
 

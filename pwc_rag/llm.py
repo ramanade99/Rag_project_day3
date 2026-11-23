@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import os
 import re
+
+from .textutil import split_sentences
 from typing import Protocol
 
 
@@ -62,7 +64,7 @@ class OfflineLLM:
         sources = re.findall(r"\[S(\d+)\] \(.*?\)\n(.*?)(?=\n\n\[S\d+\]|\n</context>)", user, re.S)
         scored = []
         for sid, text in sources:
-            for sent in re.split(r"(?<=[.;])\s+|\n+", text):
+            for sent in split_sentences(text):
                 s = sent.strip()
                 if len(s) > 25:
                     scored.append((len(qw & _words(s)), int(sid), s))

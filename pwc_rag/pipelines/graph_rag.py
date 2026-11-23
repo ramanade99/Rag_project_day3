@@ -41,8 +41,9 @@ class GState(TypedDict, total=False):
 class GraphRAG(Pipeline):
     name = "Graph RAG"
 
-    def __init__(self, index, enabled_nodes: set[str] | None = None):
+    def __init__(self, index, enabled_nodes: set[str] | None = None, enable_cycle: bool = True):
         super().__init__(index)
+        self.enable_cycle = enable_cycle
         self.enabled = set(enabled_nodes) if enabled_nodes is not None else set(NODES)
         self.enabled.add("synthesis")  # an answer must always be produced
         self.timer = Timer()
@@ -128,7 +129,7 @@ class GraphRAG(Pipeline):
 
     def _route_after_rerank(self, s: GState) -> str:
         thin = len(s.get("final_ids", [])) < min(3, self.index.settings.hp.top_k)
-        if thin and s.get("iteration", 0) < MAX_ITERATIONS and "hybrid_search" in self.enabled:
+        if thin and s.get("iteration", 0) < MAX_ITERATIONS and "hybrid_search" in self.enabled and self.enable_cycle:
             return "widen"
         return "synthesis"
 
