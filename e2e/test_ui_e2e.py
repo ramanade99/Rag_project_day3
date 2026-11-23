@@ -213,8 +213,14 @@ def test_openrouter_key_entry_is_masked_and_never_echoed(page):
     if not sb.locator('div[data-testid="stSelectbox"]:has-text("Provider")').first.is_visible():
         sb.get_by_text("LLM provider").click(); page.wait_for_timeout(500)
     sel = sb.locator('div[data-testid="stSelectbox"]:has-text("Provider")').first
-    sel.scroll_into_view_if_needed(); sel.click(force=True)
-    page.get_by_role("option", name="OpenRouter").click(); page.wait_for_timeout(1500)
+    opt = page.get_by_role("option", name="OpenRouter")
+    for _ in range(4):  # the dropdown can close if Streamlit re-renders mid-click; retry until it stays open
+        sel.scroll_into_view_if_needed(); sel.click(force=True)
+        try:
+            opt.wait_for(state="visible", timeout=4000); break
+        except Exception:
+            page.wait_for_timeout(1500)
+    opt.click(); page.wait_for_timeout(1500)
     key = sb.locator('input[aria-label="OpenRouter API key"]')
     assert key.get_attribute("type") == "password"          # masked input
     key.fill(FAKE); key.press("Enter"); page.wait_for_timeout(500)

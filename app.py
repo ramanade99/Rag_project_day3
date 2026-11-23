@@ -1,6 +1,18 @@
 """PwC India Advisory - Standard vs HyDE vs Graph RAG. Run: streamlit run app.py"""
 from __future__ import annotations
 
+import sys
+from pathlib import Path as _P
+
+# Dev/ops guard: Streamlit keeps imported modules in memory across code changes, which caused
+# "cannot import name ..." errors after pwc_rag was updated while the server kept running.
+# If any pwc_rag source file is newer than when it was loaded, drop the cached modules so they re-import.
+_latest = max((f.stat().st_mtime for f in (_P(__file__).parent / "pwc_rag").rglob("*.py")), default=0)
+if getattr(sys, "_pwc_rag_loaded_mtime", None) != _latest:
+    for _m in [m for m in sys.modules if m == "pwc_rag" or m.startswith("pwc_rag.")]:
+        del sys.modules[_m]
+    sys._pwc_rag_loaded_mtime = _latest
+
 import html
 import json
 import re
