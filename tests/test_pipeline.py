@@ -183,3 +183,13 @@ def test_openrouter_selection_and_key_redaction(monkeypatch):
         _chat = type("C", (), {"invoke": lambda *a, **k: (_ for _ in ()).throw(ConnectionError("bad key sk-or-secret-123456"))})()
     ok, msg = check_llm(Boom())
     assert not ok and "sk-or-secret-123456" not in msg
+
+
+def test_parallel_benchmark_matches_sequential_and_reports_progress(index):
+    ev, gold = load_eval(ROOT / "data")
+    calls = []
+    seq = evaluate(index, ev, gold, workers=1, limit=4)
+    par = evaluate(index, ev, gold, workers=4, limit=4, progress=lambda d, t: calls.append((d, t)))
+    for eng in seq:
+        assert seq[eng]["rcr"] == par[eng]["rcr"] and [r["id"] for r in seq[eng]["rows"]] == [r["id"] for r in par[eng]["rows"]]
+    assert calls[0] == (0, 12) and calls[-1] == (12, 12)

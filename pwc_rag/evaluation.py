@@ -83,30 +83,48 @@ def entity_resolution_accuracy(index: RAGIndex, gold: dict[str, str]) -> float:
     return ok / len(gold)
 
 
-def evaluate(index: RAGIndex, eval_set: list[dict], gold_er: dict[str, str],
-             engines: dict | None = None, engine_kwargs: dict | None = None) -> dict:
+def _run_one(index: RAGIndex, name: str, cls, kwargs: dict, q: dict) -> dict:
+    pipe = cls(index, **kwargs)  # fresh pipeline per task: pipelines hold per-run timers, so they are not shared across threads
+    r = pipe.run(q["question"], q.get("area", "Tax & Regulatory Services"))
+    return {"engine": name, "id": q["id"], "type": q.get("type", "other"), "rcr": retrieval_context_recall(r, q["facts"]),
+            "faithfulness": faithfulness(r), "latency_ms": r.latency_ms, "timings_ms": r.timings_ms}
+
+
+def evaluate(index: RAGIndex, eval_set: list[dict], gold_er: dict[str, str], engines: dict | None = None,
+             engine_kwargs: dict | None = None, workers: int = 1, limit: int | None = None, progress=None) -> dict:
+    """Run every (engine, question) pair. workers>1 runs LLM-bound tasks concurrently (much faster with a hosted LLM,
+    but per-query latencies then include contention - use workers=1 for clean latency numbers).
+    `progress(done, total)` is invoked from the calling thread only (safe for Streamlit)."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     engines = engines or ENGINES
+    eval_set = eval_set[:limit] if limit else eval_set
     err = entity_resolution_accuracy(index, gold_er)
+    tasks = [(n, c, (engine_kwargs or {}).get(n, {}), q) for n, c in engines.items() for q in eval_set]
+    results: list[dict] = []
+    if progress:
+        progress(0, len(tasks))
+    if workers <= 1:
+        for t in tasks:
+            results.append(_run_one(index, *t))
+            if progress:
+                progress(len(results), len(tasks))
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            for f in as_completed([ex.submit(_run_one, index, *t) for t in tasks]):
+                results.append(f.result())
+                if progress:
+                    progress(len(results), len(tasks))
+    order = {q["id"]: i for i, q in enumerate(eval_set)}
     report: dict = {}
-    for name, cls in engines.items():
-        pipe = cls(index, **(engine_kwargs or {}).get(name, {}))
-        rows = []
-        for q in eval_set:
-            r = pipe.run(q["question"], q.get("area", "Tax & Regulatory Services"))
-            rows.append({"id": q["id"], "type": q.get("type", "other"), "rcr": retrieval_context_recall(r, q["facts"]),
-                         "faithfulness": faithfulness(r), "latency_ms": r.latency_ms, "timings_ms": r.timings_ms})
-        by_type: dict[str, float] = {}
-        for t in {r["type"] for r in rows}:
-            by_type[t] = statistics.mean(r["rcr"] for r in rows if r["type"] == t)
+    for name in engines:
+        rows = sorted((r for r in results if r["engine"] == name), key=lambda r: order[r["id"]])
+        by_type = {t: statistics.mean(r["rcr"] for r in rows if r["type"] == t) for t in {r["type"] for r in rows}}
         lat = sorted(r["latency_ms"] for r in rows)
         report[name] = {
-            "rcr": statistics.mean(r["rcr"] for r in rows),
-            "faithfulness": statistics.mean(r["faithfulness"] for r in rows),
+            "rcr": statistics.mean(r["rcr"] for r in rows), "faithfulness": statistics.mean(r["faithfulness"] for r in rows),
             "entity_resolution_accuracy": err if name == "Graph RAG" else None,
-            "latency_ms_mean": statistics.mean(lat),
-            "latency_ms_p95": lat[min(len(lat) - 1, int(0.95 * len(lat)))],
-            "rcr_by_query_type": by_type, "rows": rows,
-        }
+            "latency_ms_mean": statistics.mean(lat), "latency_ms_p95": lat[min(len(lat) - 1, int(0.95 * len(lat)))],
+            "rcr_by_query_type": by_type, "rows": rows, "workers": workers}
     return report
 
 

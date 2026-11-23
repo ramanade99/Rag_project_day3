@@ -126,6 +126,7 @@ def test_tab3_toggle_and_tab4_tab5(page):
     expect(page.get_by_text("Qualitative matrix")).to_be_visible(timeout=90000)
     body = page.inner_text("body")
     assert all(e in body for e in ["Standard RAG", "HyDE RAG", "Graph RAG"])
+    assert "Last run:" in body and "parallel x4" in body and "Questions to run" in body
     page.screenshot(path=str(SHOTS / "tab5_benchmark.png"), full_page=True)
 
 

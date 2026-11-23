@@ -503,13 +503,38 @@ with t5:
     if not S.index:
         st.info("Ingest documents or load the sample corpus (Tab 1), then run the benchmark.")
     chosen = st.multiselect("Engines to compare", list(ENGINES), default=list(ENGINES))
-    st.caption("Runs the bundled gold question set (`data/eval_set.json`) - meaningful on the sample corpus.")
+    ev_all, _ = load_eval("data")
+    cA, cB, cC = st.columns([1.2, 1.2, 2])
+    nq = cA.slider("Questions to run", 1, len(ev_all), len(ev_all), help="Fewer questions = faster. Full gold set is recommended for reporting.")
+    fast = cB.toggle("Fast mode (parallel)", value=True,
+                     help="Runs LLM calls concurrently (4 at a time). Much faster with a hosted LLM; per-query latencies "
+                          "then include contention. Turn off for clean latency measurements.")
+    llm_now = S.index.llm.name if S.index else "-"
+    n_calls = nq * len(chosen) if chosen else 0
+    cC.caption(f"{n_calls} runs on `{llm_now}`. Hosted LLMs make ~1-5 calls per run (HyDE: N+1), so expect "
+               f"{'about 3-5x faster' if fast else 'a longer run'} in {'fast' if fast else 'sequential'} mode. "
+               "Gold set: `data/eval_set.json` (meaningful on the sample corpus).")
     if st.button("Run benchmark on eval set", type="primary") and S.index and chosen:
+        import time as _t
         ev, gold = load_eval("data")
-        bar = st.progress(0.0, text="Running benchmark...")
-        S.bench = evaluate(S.index, ev, gold, engines={k: ENGINES[k] for k in chosen},
-                           engine_kwargs={"Graph RAG": {"enabled_nodes": S.enabled_nodes, "enable_cycle": S.cycle}})
+        bar = st.progress(0.0, text="Starting benchmark...")
+        t0 = _t.perf_counter()
+
+        def _prog(done, total):
+            el = _t.perf_counter() - t0
+            eta = f", ~{el / done * (total - done):.0f}s left" if done else ""
+            bar.progress(done / total, text=f"Benchmark {done}/{total} runs - {el:.0f}s elapsed{eta}")
+        try:
+            S.bench = evaluate(S.index, ev, gold, engines={k: ENGINES[k] for k in chosen},
+                               engine_kwargs={"Graph RAG": {"enabled_nodes": S.enabled_nodes, "enable_cycle": S.cycle}},
+                               workers=4 if fast else 1, limit=nq, progress=_prog)
+            S.bench_meta = f"{n_calls} runs in {_t.perf_counter() - t0:.1f}s ({'parallel x4' if fast else 'sequential'})"
+        except Exception as e:  # noqa: BLE001
+            from pwc_rag.llm import redact
+            st.error(f"Benchmark failed: {redact(f'{type(e).__name__}: {e}')}")
         bar.empty()
+    if S.get("bench_meta"):
+        st.caption(f"Last run: {S.bench_meta}")
     if S.bench:
         rows = [{"Engine": k, "RCR": round(v["rcr"], 2), "Faithfulness": round(v["faithfulness"], 2),
                  "Entity-Res. Acc.": v["entity_resolution_accuracy"], "Mean latency (ms)": round(v["latency_ms_mean"], 1),

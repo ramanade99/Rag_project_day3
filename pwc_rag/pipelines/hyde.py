@@ -20,17 +20,19 @@ class HyDERAG(Pipeline):
     name = "HyDE RAG"
 
     def hypotheses(self, question: str, n: int) -> list[str]:
-        out = []
-        for angle in (ANGLES * ((n // len(ANGLES)) + 1))[:n]:
+        """N independent LLM calls (one per regulatory angle) - issued concurrently to cut latency ~N-fold."""
+        from concurrent.futures import ThreadPoolExecutor
+        angles = (ANGLES * ((n // len(ANGLES)) + 1))[:n]
+
+        def one(angle: str) -> str:
             try:
-                p = self.index.llm.invoke(
+                return self.index.llm.invoke(
                     "You write hypothetical regulatory passages used only for retrieval. Do not state it as fact.",
-                    f"HYDE_PASSAGE\nQUESTION: {question}\nANGLE: {angle}", max_tokens=300)
+                    f"HYDE_PASSAGE\nQUESTION: {question}\nANGLE: {angle}", max_tokens=300).strip()
             except Exception:
-                p = ""
-            if p.strip():
-                out.append(p.strip())
-        return out
+                return ""
+        with ThreadPoolExecutor(max_workers=max(1, n)) as ex:
+            return [p for p in ex.map(one, angles) if p]
 
     def run(self, question: str, practice_area: str = DEFAULT_AREA) -> RAGResult:
         t0, tm = time.perf_counter(), Timer()
