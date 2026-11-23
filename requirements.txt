@@ -1,0 +1,17 @@
+langchain-core
+langchain-text-splitters
+langchain-anthropic
+langgraph
+networkx
+rank-bm25
+chromadb
+numpy
+scikit-learn
+tiktoken
+pypdf
+python-docx
+streamlit
+plotly
+pytest
+# Optional (production-grade embeddings, ~2GB with torch):
+#   pip install sentence-transformers transformers

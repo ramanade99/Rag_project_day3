@@ -1,0 +1,10 @@
+ILLUSTRATIVE SAMPLE - NOT ACTUAL LAW. Synthetic text created for testing this pipeline.
+
+Section 1. Customer Due Diligence
+The RBI Master Direction on KYC requires every regulated entity to verify customer identity and identify the Beneficial Owner for legal entities. The PMLA governs the maintenance of KYC records for five years after the end of the business relationship.
+
+Section 2. Enhanced Due Diligence
+Regulated entities must apply Enhanced Due Diligence to high-risk customers. Under the PMLA, the FIU-IND receives suspicious transaction reports within seven days of the determination of suspicion.
+
+Section 3. Penalties
+The RBI imposes a monetary penalty for non-compliance with KYC norms. The PMLA penalises failure to maintain records with a fine of up to Rs. 1 lakh per failure. Internal Audit must test KYC controls annually and map each control to the relevant RBI obligation under ISO 31000 risk assessment.

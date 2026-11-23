@@ -1,0 +1,10 @@
+ILLUSTRATIVE SAMPLE - NOT ACTUAL LAW. Synthetic text created for testing this pipeline.
+
+Section 1. E-Invoicing under GST
+The CBIC issues a notification requiring e-invoicing for registered persons whose aggregate turnover exceeds Rs. 5 crore in any preceding financial year. The CGST Act governs the generation of the Invoice Reference Number (IRN) for each business-to-business invoice.
+
+Section 2. Input Service Distributor
+Under the CGST Act, an ISD must distribute input tax credit on common input services to its recipient units. The GST Council clarified that ISD registration is mandatory from the effective date of the amendment; this clarification applies prospectively and not retrospectively.
+
+Section 3. Late Reporting Penalty
+Rule 36(4) requires input tax credit to be claimed only when the supplier invoice appears in the recipient's auto-populated statement. The CBIC penalises delayed IRN reporting with a penalty of Rs. 10,000 per invoice or the amount of tax evaded, whichever is higher.

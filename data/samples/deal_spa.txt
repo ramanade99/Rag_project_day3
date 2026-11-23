@@ -1,0 +1,10 @@
+ILLUSTRATIVE SAMPLE - NOT ACTUAL LAW. Synthetic text created for testing this pipeline.
+
+Clause 1. Indemnity
+The Seller grants an Indemnity to the Buyer under the Share Purchase Agreement for losses arising from breach of warranties. The Indemnity is capped at 20 percent of the purchase price, with a basket threshold of Rs. 50 lakh.
+
+Clause 2. Material Adverse Change
+The SPA allows the Buyer to terminate before closing if a Material Adverse Change occurs. A MAC is defined in Clause 2 as a decline of more than 15 percent in consolidated revenue.
+
+Clause 3. Foreign Investment
+Where the Buyer is a non-resident, the transaction must comply with FEMA pricing guidelines. The Companies Act 2013 requires valuation by a registered valuer, and FEMA requires reporting to the RBI within 60 days of share allotment.

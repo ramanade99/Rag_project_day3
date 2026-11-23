@@ -1,0 +1,10 @@
+ILLUSTRATIVE SAMPLE - NOT ACTUAL LAW. Synthetic text created for testing this pipeline.
+
+Section 1. TDS on Contractor Payments
+The Income Tax Act prescribes under Section 194C that a payer must deduct TDS at 1 percent on payments to individual contractors and at 2 percent on payments to other contractors. The CBDT notifies the threshold of Rs. 30,000 for a single payment.
+
+Section 2. Retrospective Clarification
+The CBDT clarified through a circular that the definition of work in Section 194C covers manufacturing contracts. This is a retrospective clarification and not a prospective amendment of the Income Tax Act.
+
+Section 3. Failure to Deduct
+Where the Tax Authority finds that TDS was not deducted, Section 201 treats the payer as an assessee in default and the Income Tax Dept levies interest at 1 percent per month.
