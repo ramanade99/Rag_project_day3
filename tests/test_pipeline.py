@@ -164,3 +164,22 @@ def test_faithfulness_numeric_grounding_and_paraphrase(index):
     headings = RAGResult("x", "q", "## Answer\n**Key points:**\n- E-invoicing is mandatory when turnover exceeds Rs. 5 crore [S1]\n"
                          "## Gaps & Limitations\n- Nothing on penalties.\n", ctx)
     assert faithfulness(ok) == 1.0 and faithfulness(wrong_number) == 0.0 and faithfulness(headings) == 1.0
+
+
+def test_openrouter_selection_and_key_redaction(monkeypatch):
+    from pwc_rag.llm import OpenRouterLLM, check_llm, get_llm, redact
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    with pytest.raises(RuntimeError):
+        get_llm("openrouter")                       # no key -> clear error
+    with pytest.raises(ValueError):
+        OpenRouterLLM("   ")
+    llm = get_llm("openrouter", "anthropic/claude-sonnet-4.5", "sk-or-secret-123456")
+    assert llm.name == "openrouter:anthropic/claude-sonnet-4.5"
+    assert get_llm("offline").name == "offline-extractive"
+    assert "sk-or-secret-123456" not in redact("auth failed for sk-or-secret-123456", "sk-or-secret-123456")
+
+    class Boom(OpenRouterLLM):
+        def __init__(self): self.name, self._key = "openrouter:x", "sk-or-secret-123456"
+        _chat = type("C", (), {"invoke": lambda *a, **k: (_ for _ in ()).throw(ConnectionError("bad key sk-or-secret-123456"))})()
+    ok, msg = check_llm(Boom())
+    assert not ok and "sk-or-secret-123456" not in msg

@@ -1,6 +1,7 @@
 langchain-core
 langchain-text-splitters
 langchain-anthropic
+langchain-openai
 langgraph
 networkx
 rank-bm25

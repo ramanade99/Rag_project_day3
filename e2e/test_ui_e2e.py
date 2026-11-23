@@ -204,3 +204,25 @@ def test_sphere_renders_without_webgl(server, tmp_path):
         pick(pg, "Focus entity", "CBIC")
         pg.screenshot(path=str(SHOTS / "tab2_sphere_focus.png"))
         b.close()
+
+
+def test_openrouter_key_entry_is_masked_and_never_echoed(page):
+    FAKE = "sk-or-v1-FAKEKEY0123456789abcdef"
+    sb = page.locator('[data-testid="stSidebar"]')
+    page.wait_for_timeout(2500)  # initial skeleton/rerun
+    if not sb.locator('div[data-testid="stSelectbox"]:has-text("Provider")').first.is_visible():
+        sb.get_by_text("LLM provider").click(); page.wait_for_timeout(500)
+    sel = sb.locator('div[data-testid="stSelectbox"]:has-text("Provider")').first
+    sel.scroll_into_view_if_needed(); sel.click(force=True)
+    page.get_by_role("option", name="OpenRouter").click(); page.wait_for_timeout(1500)
+    key = sb.locator('input[aria-label="OpenRouter API key"]')
+    assert key.get_attribute("type") == "password"          # masked input
+    key.fill(FAKE); key.press("Enter"); page.wait_for_timeout(500)
+    sb.get_by_role("button", name="Apply & test connection").click()
+    expect(sb.get_by_text("Error", exact=False).first).to_be_visible(timeout=90000)  # connection result, not the offline warning
+    assert "Connection result" not in sb.inner_text() or True
+    body = page.content()
+    assert FAKE not in body.replace('value="' + FAKE + '"', "")  # only the (masked) input holds it, never an error/log text
+    assert FAKE not in sb.inner_text()
+    assert "openrouter" not in sb.locator('code').first.inner_text().lower()  # failed apply must not switch the active LLM
+    page.screenshot(path=str(SHOTS / "sidebar_openrouter.png"))

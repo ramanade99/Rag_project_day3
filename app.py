@@ -42,7 +42,7 @@ st.markdown(f"""<style>
 
 S = st.session_state
 for k, v in dict(settings=Settings(), raw_docs=[], index=None, chat=[], last=None, enabled_nodes=set(NODES),
-                 cycle=True, bench=None, history=[], docs=[], pending_q=None, ingest_msg=None).items():
+                 cycle=True, bench=None, history=[], docs=[], pending_q=None, ingest_msg=None, llm=None, llm_note=None).items():
     S.setdefault(k, v)
 if S.ingest_msg is not None and not isinstance(S.ingest_msg, list):
     S.ingest_msg = None
@@ -50,7 +50,7 @@ if S.ingest_msg is not None and not isinstance(S.ingest_msg, list):
 
 # ----------------------------------------------------------------------------- helpers
 def build_index(raw_docs) -> RAGIndex:
-    idx = RAGIndex.create(S.settings)
+    idx = RAGIndex.create(S.settings, llm=S.llm)
     idx.ingest(raw_docs)
     return idx
 
@@ -58,7 +58,7 @@ def build_index(raw_docs) -> RAGIndex:
 def ingest_docs(docs, label_area):
     """Incrementally add documents; creates the index on first use."""
     if S.index is None:
-        S.index = RAGIndex.create(S.settings)
+        S.index = RAGIndex.create(S.settings, llm=S.llm)
     new = S.index.ingest(docs)
     S.raw_docs += docs
     return new
@@ -221,13 +221,38 @@ with st.sidebar:
         llm_name, emb_name = S.index.llm.name, type(S.index.vectors.emb).__name__
     else:
         from pwc_rag.llm import get_llm
-        llm_name = get_llm(S.settings.llm_backend, S.settings.llm_model).name
+        llm_name = S.llm.name if S.llm else get_llm(S.settings.llm_backend, S.settings.llm_model).name
         emb_name = "(loads on first ingest)"
     st.markdown(f"**LLM:** `{llm_name}`  \n**Embeddings:** `{emb_name}`  \n**Vector store:** `{S.settings.vector_backend}`")
     if llm_name.startswith("offline"):
         st.warning("Offline extractive mode: answers copy source sentences. Set ANTHROPIC_API_KEY for full synthesis and real HyDE.")
     if emb_name == "HashingEmbeddings":
         st.warning("Hashing embeddings in use. `pip install sentence-transformers` for bge-large-en-v1.5.")
+    with st.expander("LLM provider", expanded=not S.llm and llm_name.startswith("offline")):
+        from pwc_rag.llm import DEFAULT_OPENROUTER_MODEL, check_llm, get_llm as _get_llm, redact
+        prov = st.selectbox("Provider", ["Auto (environment)", "OpenRouter", "Anthropic (environment key)", "Offline (extractive)"])
+        or_key = or_model = None
+        if prov == "OpenRouter":
+            or_key = st.text_input("OpenRouter API key", type="password", placeholder="sk-or-...",
+                                   help="Kept in this browser session's server memory only - never written to disk or logs. "
+                                        "Prefer the OPENROUTER_API_KEY environment variable on shared machines.")
+            or_model = st.text_input("Model", value=DEFAULT_OPENROUTER_MODEL, help="Any slug from openrouter.ai/models")
+        if st.button("Apply & test connection"):
+            try:
+                backend = {"Auto (environment)": "auto", "OpenRouter": "openrouter", "Anthropic (environment key)": "anthropic",
+                           "Offline (extractive)": "offline"}[prov]
+                new_llm = _get_llm(backend, or_model or S.settings.llm_model, or_key or None)
+                ok, msg = check_llm(new_llm)
+                if ok:
+                    S.llm = new_llm
+                    if S.index:
+                        S.index.llm = new_llm
+                S.llm_note = ("success" if ok else "error", redact(msg, or_key))
+            except Exception as e:  # noqa: BLE001
+                S.llm_note = ("error", redact(f"{type(e).__name__}: {e}", or_key))
+            st.rerun()
+        if S.llm_note:
+            (st.success if S.llm_note[0] == "success" else st.error)(S.llm_note[1])
     st.subheader("Workspace")
     c = st.columns(2)
     c[0].metric("Chunks", len(S.index.chunks) if S.index else 0)

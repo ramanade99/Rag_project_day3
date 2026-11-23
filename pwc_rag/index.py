@@ -24,10 +24,10 @@ class RAGIndex:
     positions: dict[str, int] = field(default_factory=dict)
 
     @classmethod
-    def create(cls, settings: Settings | None = None, llm: LLM | None = None) -> "RAGIndex":
+    def create(cls, settings: Settings | None = None, llm: LLM | None = None, api_key: str | None = None) -> "RAGIndex":
         s = settings or Settings()
         emb = get_embeddings(s.embedding_backend, s.embedding_model)
-        return cls(s, llm or get_llm(s.llm_backend, s.llm_model), VectorIndex(emb, s.vector_backend))
+        return cls(s, llm or get_llm(s.llm_backend, s.llm_model, api_key), VectorIndex(emb, s.vector_backend))
 
     def ingest(self, docs: list[Document]) -> int:
         hp = self.settings.hp.validate()

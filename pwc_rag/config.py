@@ -31,7 +31,7 @@ class Settings:
     # "auto": use bge if sentence-transformers is installed, else hashing fallback.
     embedding_backend: str = os.getenv("EMBEDDING_BACKEND", "auto")  # auto|bge|hash
     llm_model: str = os.getenv("LLM_MODEL", "claude-sonnet-5-5")
-    llm_backend: str = os.getenv("LLM_BACKEND", "auto")  # auto|anthropic|offline
+    llm_backend: str = os.getenv("LLM_BACKEND", "auto")  # auto|anthropic|openrouter|offline
     vector_backend: str = os.getenv("VECTOR_BACKEND", "numpy")  # numpy|chroma
     persist_dir: str = os.getenv("PERSIST_DIR", "storage")
     hp: Hyperparameters = field(default_factory=Hyperparameters)

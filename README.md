@@ -52,3 +52,9 @@ Sweep on a mixed 16-chunk corpus (samples + test_inputs, unscoped = harder), ret
 - RRF constant (10-100) and hop radius (0-3) made no measurable difference on a corpus this small, so they stay at spec values.
 - With bge-large-en-v1.5, HyDE recall rose 0.71 -> 0.93 versus the hashing fallback.
 Re-run `PYTHONPATH=. python scripts/tune.py` on your real corpus and gold questions before changing defaults.
+
+## LLM providers (OpenRouter / Anthropic / offline)
+- **Recommended:** `export OPENROUTER_API_KEY=...` (or copy `.env.example`) and start the app; `LLM_BACKEND=auto` picks it up.
+- **From the UI:** sidebar -> *LLM provider* -> OpenRouter -> paste key + model slug -> *Apply & test connection*. The key field is masked,
+  held only in server memory for the session, never written to disk or logs, and redacted from any error text. A failed test leaves the active LLM unchanged.
+- Use the UI field only on your own machine; on a shared/remote deployment prefer the environment variable (the key travels from your browser to the server).
